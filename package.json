@@ -1,0 +1,10 @@
+{
+  "name": "english-puyo-pang",
+  "version": "1.0.0",
+  "description": "잉글리시 뿌요 팡! — 6학년 영어 10·11·12단원·종합 복습 연결 퍼즐 대전",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test/sim.js && node test/ranked.js" },
+  "dependencies": { "express": "^5.1.0", "socket.io": "^4.8.1" },
+  "devDependencies": {},
+  "engines": { "node": ">=18" }
+}
