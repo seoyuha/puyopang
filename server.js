@@ -201,6 +201,7 @@ function createMatch(c, humans, botCount, opts = {}) {
     if (s.matchId && s.matchId !== id) leaveMatch(c, s, true);
     s.status = 'playing'; s.matchId = id; s.waitSince = 0;
     s.lastOpp = m.players.filter(p => p.pid !== s.id && !p.isBot).map(p => p.pid);
+    if (!opts.practice) s.lastBot = botCount > 0; // 바로 전 경기가 AI 대결이었는지
   }
   later(m, () => startMatch(m), m.startAt - Date.now());
   pushMatch(m); pushClass(c);
@@ -493,8 +494,10 @@ function canChallenge(c, s, t, pos) {
   pos = pos || ladderPos(c);
   return pos.get(t.id) < pos.get(s.id);
 }
+const AI_AGAIN = FAST ? 3000 : 120000; // AI와 붙었던 학생은 다음엔 친구와: 이만큼 기다려도 친구가 없을 때만 다시 AI
 function pairUp(c, list, used, n, aiAfter) {
   let made = false;
+  list = list.filter(x => x.lastBot).concat(list.filter(x => !x.lastBot)); // 지난번 AI와 한 학생부터 친구와 짝지어요
   for (const s of list) {
     if (used.has(s.id)) continue;
     const rest = list.filter(x => !used.has(x.id) && x.id !== s.id);
@@ -508,8 +511,9 @@ function pairUp(c, list, used, n, aiAfter) {
     createMatch(c, [s, ...pick], 0); made = true;
   }
   if (c.settings.aiFill) {
-    const left = list.filter(x => !used.has(x.id));
-    if (left.length && left.length < n && Date.now() - left[0].waitSince >= aiAfter) { left.forEach(x => used.add(x.id)); createMatch(c, left, n - left.length); made = true; }
+    const now = Date.now();
+    const left = list.filter(x => !used.has(x.id) && now - x.waitSince >= (x.lastBot ? AI_AGAIN : aiAfter)).slice(0, n - 1);
+    if (left.length && left.length < n && list.filter(x => !used.has(x.id)).length < n) { left.forEach(x => used.add(x.id)); createMatch(c, left, n - left.length); made = true; }
   }
   return made;
 }
