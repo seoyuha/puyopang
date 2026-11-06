@@ -187,7 +187,7 @@ function createMatch(c, humans, botCount, opts = {}) {
   const mk = (pid, name, isBot) => ({
     pid, name, isBot, board: E.toStr(E.empty()), score: 0, alive: true, pending: 0, target: null, stars: 0, streak: 0,
     phase: 'wait', q: null, tries: 0, pairIdx: 0, pair: null, seen: new Set(), reviewQ: [], qCount: 0,
-    st: { first: 0, retry: 0, wrongTries: 0, seen: 0, maxChain: 0, sent: 0, chains2: 0, events: 0, bestStreak: 0 }, wrongs: [], rank: 0, skill: 0.55 + Math.random() * 0.3,
+    st: { first: 0, retry: 0, wrongTries: 0, seen: 0, maxChain: 0, sent: 0, chains2: 0, events: 0, bestStreak: 0 }, wrongs: [], rank: 0, skill: 0.15 + Math.random() * 0.25,
     recentItems: [], mastery: null, curse: { fog: 0, reverse: 0 }, learned: [], practiced: new Set(), comebackAt: -9,
   });
   humans.forEach(s => { const p = mk(s.id, s.name, false); p.mastery = opts.practice ? {} : (s.mastery = s.mastery || {}); m.players.push(p); });
@@ -407,10 +407,10 @@ function endMatch(m, why) {
         if (p.pid === m.ranked.defender && p.rank === 1) { bonus = 5; s.stats.defenses++; }
         s.stats.ranked++;
       }
-      const pts = p.st.first * 3 + p.st.retry + placePoints(p.rank, m.players.length) + bonus;
+      const pts = p.st.first * 3 + p.st.retry + (m.why === 'swap' ? 0 : placePoints(p.rank, m.players.length)) + bonus;
       p.points = pts; p.bonus = bonus;
       const S = s.stats;
-      S.games++; if (p.rank === 1) S.wins++; S.points += pts; S.first += p.st.first; S.retry += p.st.retry; S.wrongTries += p.st.wrongTries;
+      if (m.why !== 'swap') { S.games++; if (p.rank === 1) S.wins++; } S.points += pts; S.first += p.st.first; S.retry += p.st.retry; S.wrongTries += p.st.wrongTries;
       S.seen += p.st.seen; S.bestChain = Math.max(S.bestChain, p.st.maxChain); S.score += p.score; S.sent += p.st.sent; S.chains2 += p.st.chains2;
       S.events += p.st.events; S.bestStreak = Math.max(S.bestStreak, p.st.bestStreak); if (vsAI) S.aiGames++;
       c.results.push({
@@ -455,13 +455,13 @@ function leaveMatch(c, s, silent) {
 /* ===================== AI 상대 ===================== */
 function botThink(m, p) {
   const c = clsOf(m);
-  const solve = (FAST ? 300 : 3500) + Math.random() * (FAST ? 400 : 5500);
+  const solve = (FAST ? 300 : 6000) + Math.random() * (FAST ? 400 : 6000); // 학생보다 조금 느리게
   later(m, () => {
     if (!p.alive || p.phase !== 'question' || m.state !== 'playing') return;
     if (c && c.paused && !m.practice) return botThink(m, p);
-    const right = Math.random() < 0.72;
+    const right = Math.random() < 0.6;
     let r = answer(m, p, right ? (p.q.type === 'order' ? p.q.answerKey : p.q.answer) : (p.q.type === 'order' ? 'x' : (p.q.answer + 1) % 4));
-    if (!r.ok) { later(m, () => { if (p.phase === 'question') { answer(m, p, p.q.type === 'order' ? p.q.answerKey : p.q.answer); botPlace(m, p); } }, FAST ? 200 : 2500); return; }
+    if (!r.ok) { later(m, () => { if (p.phase === 'question') { answer(m, p, p.q.type === 'order' ? p.q.answerKey : p.q.answer); botPlace(m, p); } }, FAST ? 200 : 4000); return; }
     botPlace(m, p);
   }, solve);
 }
@@ -475,7 +475,7 @@ function botPlace(m, p) {
     let nb = res.board;
     if (r.garbage) nb = E.addGarbage(nb, r.garbage);
     later(m, () => settled(m, p, { board: E.toStr(nb), dead: E.isDead(nb) || d.cells.some(x => x.r < 0) }), FAST ? 50 : 300 + res.chain * 700);
-  }, FAST ? 100 : 900 + Math.random() * 900);
+  }, FAST ? 100 : 1500 + Math.random() * 1500);
 }
 
 /* ===================== 자동 매칭 ===================== */
@@ -542,7 +542,24 @@ function matchmake(c) {
     const free = waiting.filter(x => !used.has(x.id) && !x.challenge && now - x.waitSince >= RANK_WAIT);
     if (pairUp(c, free, used, 2, FAST ? 300 : 3000)) made = true;
   } else if (pairUp(c, waiting, used, n, FAST ? 600 : 8000)) made = true;
+  if (swapAI(c, waiting.filter(x => !used.has(x.id) && !x.challenge && (!rankMode(c) || now - x.waitSince >= RANK_WAIT)), used, rankMode(c) ? 2 : n)) made = true;
   if (made) pushClass(c);
+}
+// AI와 대결 중인 학생이 있는데 친구가 새로 기다리면: AI 경기를 멈추고 친구끼리 새로 시작해요
+function swapAI(c, free, used, n) {
+  let made = false;
+  for (const m of [...matches.values()]) {
+    if (!free.length) break;
+    if (m.code !== c.code || m.practice || m.ranked || m.state === 'ended' || !m.players.some(p => p.isBot)) continue;
+    const hs = m.players.filter(p => !p.isBot).map(p => c.students[p.pid]).filter(s => s && s.online && s.matchId === m.id);
+    if (!hs.length || hs.length + free.length < n) continue;
+    const add = free.splice(0, n - hs.length);
+    for (const s of hs) { const sid = s.socketId; if (sid) io.to(sid).emit('feed', `${add.map(x => x.name).join(', ')}이(가) 들어왔어요! AI 대결을 멈추고 친구와 새로 시작해요`); }
+    endMatch(m, 'swap');
+    add.forEach(x => used.add(x.id)); hs.forEach(x => used.add(x.id));
+    createMatch(c, [...hs, ...add], 0); made = true;
+  }
+  return made;
 }
 function feed(c, text) { for (const s of Object.values(c.students)) if (s.online && s.socketId) io.to(s.socketId).emit('feed', text); }
 setInterval(() => { for (const c of Object.values(DB.classes)) matchmake(c); }, FAST ? 200 : 1000);
