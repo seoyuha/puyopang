@@ -191,11 +191,11 @@
     hot(DS, [48, 790, 298, 852], () => $('#fileBk').click(), '백업 불러오기');
     el(DS, 'div', '', null, '').id = 'dOpts';
     const more = el(DS, 'button', 'pill c', [770, 294, 962, 348], '세부 설정', 'font-size:22px'); more.onclick = detailModal;
-    hot(DS, [1016, 358, 1235, 418], async () => { if (!cur) return; const r = await emit('t:start', { code: cur }); if (r.err) toast(r.err); else toast('모두 자동 배정하고 시작했어요!'); }, '모두 시작');
+    hot(DS, [1016, 358, 1235, 418], async () => { if (!cur) return; const r = await emit('t:start', { code: cur }); if (r.err) toast(r.err); else toast('게임을 열었어요! 학생들이 자동으로 배정돼요'); }, '모두 시작');
     const pz = hot(DS, [1248, 358, 1428, 418], async () => { if (!cur) return; await emit('t:pause', { code: cur, on: !(view && view.paused) }); }, '일시정지'); pz.id = 'dPause';
     el(DS, 'img', 'at', [1244, 352, 1432, 424], null, 'display:none;pointer-events:none').id = 'dResume';
     $('#dResume').src = 'img/tb_resume.webp';
-    hot(DS, [1442, 358, 1622, 418], async () => { if (!cur) return; if (!await confirmBox('진행 중인 경기를 지금 점수로 끝내고 자동 배정을 멈춰요')) return; await emit('t:stop', { code: cur }); toast('경기를 모두 끝냈어요.'); }, '경기 종료');
+    hot(DS, [1442, 358, 1622, 418], async () => { if (!cur) return; if (!await confirmBox('진행 중인 경기를 지금 점수로 끝내고 게임을 닫아요. 학생들은 더 이상 할 수 없어요.')) return; await emit('t:stop', { code: cur }); toast('게임을 닫았어요. 학생들은 더 할 수 없어요.'); }, '경기 종료');
     el(DS, 'div', 'stuSum', [1178, 444, 1618, 478]).id = 'dSum';
     el(DS, 'div', 'stuBox', [1020, 486, 1618, 624]).id = 'dStu';
     el(DS, 'div', 'lab', [620, 674, 1000, 718], '', 'font-size:20px').id = 'dLiveCnt';
@@ -221,7 +221,9 @@
     const v = view;
     if (!v) { $('#dTitle').textContent = '왼쪽에서 새 반을 만들어 주세요'; $('#dCode').textContent = ''; return; }
     const s = v.settings;
-    $('#dTitle').innerHTML = `${esc(v.name)} <span style="font-size:22px;margin-left:14px;color:${v.running ? (v.paused ? '#ffe23a' : '#2dff9a') : '#9ad8ff'}">${v.running ? (v.paused ? '⏸ 일시정지' : s.challenge ? '⚔ 랭킹전 진행 중 · 학생이 도전 상대를 골라요' : '● 진행 중 · 새로 온 학생도 자동 배정') : s.challenge ? '랭킹전 준비 · 모두 시작을 누르세요' : '대기 중 · 모두 시작을 누르세요'}</span>`;
+    $('#dTitle').innerHTML = `${esc(v.name)} <span style="font-size:22px;margin-left:14px;color:${v.running ? (v.paused ? '#ffe23a' : '#2dff9a') : '#9ad8ff'}">${v.running ? (v.paused ? '⏸ 일시정지' : s.challenge ? '⚔ 랭킹전 진행 중 · 학생이 도전 상대를 골라요' : '● 게임 열림 · 새로 온 학생도 자동 배정') : v.closed ? '■ 게임 종료 · 학생은 더 할 수 없어요' : s.challenge ? '랭킹전 준비 · 모두 시작을 누르면 열려요' : '○ 게임 닫힘 · 모두 시작을 누르면 열려요'}</span>`;
+    $$('#tDash [aria-label="일시정지"], #tDash [aria-label="경기 종료"]').forEach(b => b.classList.toggle('off', !v.running));
+    const sb = $('#tDash [aria-label="모두 시작"]'); if (sb) sb.classList.toggle('dim', !!v.running);
     $('#dCode').textContent = v.code;
     if (full || $('#dQR').dataset.code !== v.code) {
       $('#dQR').dataset.code = v.code; $('#dQR').innerHTML = '';

@@ -217,6 +217,7 @@ function startMatch(m) {
   for (const p of m.players) nextQuestion(m, p);
   pushMatch(m);
 }
+const CLOSED_MSG = c => c.endedAt ? '선생님이 게임을 끝냈어요.' : '선생님이 게임 시작을 누르면 열려요.';
 function remaining(m) { if (m.pausedLeft != null) return m.pausedLeft; if (m.state === 'countdown') return m.durMs; return Math.max(0, (m.endAt || 0) - Date.now()); }
 
 function nextQuestion(m, p) {
@@ -627,7 +628,7 @@ function ladderView(c) {
   return list.map((s, i) => ({ id: s.id, name: s.name, pos: i + 1, points: s.stats.points, acc: acc(s.stats), online: s.online, status: s.status, by: challengers[s.id] || [] }));
 }
 function studentView(c, s, lad) {
-  const v = { id: s.id, code: c.code, cls: c.name, grade: c.grade, name: s.name, status: s.status, running: c.running, paused: c.paused, mode: c.settings.mode, units: c.settings.units, matchMin: c.settings.matchMin, matchId: s.matchId, myRank: myRanks(c, s.id) };
+  const v = { id: s.id, code: c.code, cls: c.name, grade: c.grade, name: s.name, status: s.status, running: c.running, closed: !c.running && !!c.endedAt, paused: c.paused, mode: c.settings.mode, units: c.settings.units, matchMin: c.settings.matchMin, matchId: s.matchId, myRank: myRanks(c, s.id) };
   if (rankMode(c)) {
     v.rankMode = true;
     v.ladder = lad === undefined ? ladderView(c) : lad;
@@ -640,7 +641,7 @@ function studentView(c, s, lad) {
 function teacherView(c) {
   const live = [...matches.values()].filter(m => m.code === c.code && !m.practice && m.state !== 'ended' || (m.code === c.code && !m.practice && m.state === 'ended' && Date.now() - m.endedAt < 20000));
   return {
-    code: c.code, name: c.name, grade: c.grade, settings: c.settings, running: c.running, paused: c.paused,
+    code: c.code, name: c.name, grade: c.grade, settings: c.settings, running: c.running, closed: !c.running && !!c.endedAt, paused: c.paused,
     students: Object.values(c.students).map(s => ({ id: s.id, name: s.name, online: s.online, status: s.status, points: s.stats.points, games: s.stats.games, acc: acc(s.stats) })).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
     matches: live.map(matchView),
   };
@@ -712,6 +713,7 @@ io.on('connection', socket => {
   socket.on('practice', S(() => { // 기다리는 동안 AI와 연습
     const { c, s } = me;
     if (s.status === 'playing') return { err: '경기 중이에요.' };
+    if (!c.running) return { err: CLOSED_MSG(c) };
     const was = s.status === 'waiting' ? s.waitSince : 0;
     const m = createMatch(c, [s], 1, { practice: true });
     s.status = 'practice'; s.waitSince = c.running ? (was || Date.now()) : 0;
@@ -731,6 +733,7 @@ io.on('connection', socket => {
   socket.on('challenge', S(d => {
     const { c, s } = me;
     if (!rankMode(c)) return { err: '지금은 랭킹전이 아니에요.' };
+    if (!c.running) return { err: CLOSED_MSG(c) };
     const t = c.students[d.target];
     if (!t) return { err: '그 친구를 찾을 수 없어요.' };
     if (!t.online) return { err: '그 친구는 지금 접속해 있지 않아요.' };
@@ -790,7 +793,7 @@ io.on('connection', socket => {
   }));
   socket.on('t:start', T(d => { // 모두 자동 배정하고 시작
     const c = DB.classes[d.code]; if (!c) return { err: '반이 없어요.' };
-    c.running = true; c.paused = false;
+    c.running = true; c.paused = false; c.endedAt = 0; save();
     let t = Date.now() - 20000; // 지금 들어와 있는 학생은 바로 짝지어요
     for (const s of shuffle(Object.values(c.students))) if (s.online && (s.status === 'lobby' || s.status === 'result' || s.status === 'waiting')) { s.status = 'waiting'; s.matchId = null; s.waitSince = t++; s.readyAt = 0; }
     for (const s of Object.values(c.students)) if (s.online && s.status === 'practice') s.waitSince = t++;
@@ -810,7 +813,7 @@ io.on('connection', socket => {
   }));
   socket.on('t:stop', T(d => { // 경기 모두 끝내기 (지금 점수로 순위)
     const c = DB.classes[d.code]; if (!c) return { err: '반이 없어요.' };
-    c.running = false; c.paused = false;
+    c.running = false; c.paused = false; c.endedAt = Date.now(); save();
     for (const m of [...matches.values()]) if (m.code === c.code && m.state !== 'ended') { if (m.practice) { for (const t of m.timers) clearTimeout(t); matches.delete(m.id); } else endMatch(m, 'teacher'); }
     for (const s of Object.values(c.students)) { s.challenge = null; if (s.status === 'waiting' || s.status === 'practice') { s.status = 'lobby'; s.matchId = null; } }
     pushClass(c); return { ok: true };

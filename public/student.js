@@ -145,8 +145,11 @@
     $('#lbUnits').textContent = (ME.units || []).map(unitName).join(' · ');
     $('#lbTime').textContent = ME.matchMin ? `${ME.matchMin}분 경기` : '데스매치 (끝까지)';
     const run = !!ME.running, rk = !!ME.rankMode;
-    $('#lbMsgCover').style.display = run || rk ? '' : 'none'; $('#lbMsg').style.display = run || rk ? '' : 'none';
-    if (rk) $('#lbMsg').textContent = '⚔️ 랭킹전! 「우리 반 랭킹」을 눌러 도전하세요';
+    const closed = !run && !!ME.closed;
+    $('#lbMsgCover').style.display = run || rk || closed ? '' : 'none'; $('#lbMsg').style.display = run || rk || closed ? '' : 'none';
+    if (closed) $('#lbMsg').textContent = '게임이 끝났어요. 수고했어요! 👏';
+    else if (rk && !run) $('#lbMsg').textContent = '⚔️ 랭킹전 준비 중 · 선생님이 시작하면 도전할 수 있어요';
+    else if (rk) $('#lbMsg').textContent = '⚔️ 랭킹전! 「우리 반 랭킹」을 눌러 도전하세요';
     else if (run) $('#lbMsg').textContent = '상대를 찾고 있어요… 곧 대결이 시작돼요!';
   }
   $('#lbHow').onclick = () => openHow('sLobby');
@@ -616,7 +619,7 @@
     const run = ME && ME.running;
     const rk = run && ME.rankMode;
     $('#rBarCover').style.display = run && !rk ? 'none' : ''; $('#rBar').style.display = run && !rk ? 'none' : '';
-    $('#rBar').textContent = rk ? (ME.myChallenge ? `${ME.myChallenge.name}에게 도전 신청 중!` : '랭킹전! 랭킹에서 도전할 친구를 고르세요') : '선생님이 시작하면 대결이 열려요';
+    $('#rBar').textContent = rk ? (ME.myChallenge ? `${ME.myChallenge.name}에게 도전 신청 중!` : '랭킹전! 랭킹에서 도전할 친구를 고르세요') : (ME.closed ? '게임이 끝났어요. 수고했어요!' : '선생님이 시작하면 대결이 열려요');
     $('#rSec').style.display = run ? '' : 'none';
     const left = Math.max(0, 10 - Math.floor((Date.now() - resAt) / 1000)); const auto = ME.rankMode ? (ME.autoAt ? Math.max(0, Math.ceil((ME.autoAt - Date.now()) / 1000)) : null) : null;
     $('#rSec').textContent = ME.rankMode ? (ME.myChallenge ? '상대가 경기를 마치면 바로 시작해요' : auto != null ? `${auto}초 안에 고르지 않으면 자동으로 상대가 정해져요` : '') : left ? `${left}초 안에 다음 상대와 자동으로 붙어요` : '곧 시작해요!';
